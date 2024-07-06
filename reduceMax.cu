@@ -47,7 +47,7 @@ __global__ void reduceMax_persist(float *max, float *Input,
       threadsMax[t] = fmax(threadsMax[t], threadsMax[t + stride]);
   }
 
-  // TODO: FASE 3 - Computa o máximo de todos os blocos usando atomicos
+  // FASE 3 - Computa o máximo de todos os blocos usando atomicos
   int b = blockIdx.x;
   if (t == 0) {
     blockMax[b] = threadsMax[0];
@@ -79,13 +79,13 @@ int main(int argc, char **argv) {
 
   // Aloca espaço no host para vetor A e resultado
   float *h_A = (float *)malloc(vectorSize * sizeof(float));
-  float h_result = 0;
+  float h_max = 0;
 
   // Aloca espaço na GPU para vetor A e resultado
   float *d_A = NULL;
-  float *d_result = NULL;
+  float *d_max = NULL;
   cudaMalloc((void **)&d_A, vectorSize * sizeof(float));
-  cudaMalloc((void **)&d_result, sizeof(float));
+  cudaMalloc((void **)&d_max, sizeof(float));
 
   // Inicializa vetor A com valores aleatórios entre 0 e 1
   for (int i = 0; i < vectorSize; i++)
@@ -95,10 +95,10 @@ int main(int argc, char **argv) {
   cudaMemcpy(h_A, d_A, vectorSize * sizeof(float), cudaMemcpyHostToDevice);
 
   // Lança kernel
-  // TODO
+  reduceMax_persist<<<TOTAL_BLOCKS, THREADS_PER_BLOCK>>>(d_max, d_A, vectorSize);
 
   // Copia resultado para o host
-  cudaMemcpy(&h_result, d_result, sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&h_max, d_max, sizeof(float), cudaMemcpyDeviceToHost);
 
   // Calcula redução normal em CPU
   float correct = 0;
@@ -106,14 +106,14 @@ int main(int argc, char **argv) {
     correct = fmax(h_A[i], correct);
 
   // Checa corretude do resultado
-  if (h_result != correct) {
+  if (h_max != correct) {
     fprintf(stderr, "Resultado errado. Esperava %f e obteve %f\n", correct,
-            h_result);
+            h_max);
     exit(EXIT_FAILURE);
   }
 
   // Libera estruturas
   cudaFree(d_A);
-  cudaFree(d_result);
+  cudaFree(d_max);
   free(h_A);
 }
