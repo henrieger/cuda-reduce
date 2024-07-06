@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -67,10 +68,19 @@ __global__ void reduceMax_atomic_persist(float *max, float *Input,
   return;
 }
 
+void errorAndAbort(const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  vfprintf(stderr, format, args);
+  va_end(args);
+
+  printf("Abortado");
+  exit(EXIT_FAILURE);
+}
+
 int main(int argc, char **argv) {
   if (argc != 2) {
-    fprintf(stderr, "Uso: %s <TAM_VETOR>\n", argv[0]);
-    exit(EXIT_FAILURE);
+    errorAndAbort("Uso: %s <TAM_VETOR>\n", argv[0]);
   }
 
   srand(SEED);
@@ -95,7 +105,8 @@ int main(int argc, char **argv) {
   cudaMemcpy(h_A, d_A, vectorSize * sizeof(float), cudaMemcpyHostToDevice);
 
   // Lança kernel
-  reduceMax_persist<<<TOTAL_BLOCKS, THREADS_PER_BLOCK>>>(d_max, d_A, vectorSize);
+  reduceMax_persist<<<TOTAL_BLOCKS, THREADS_PER_BLOCK>>>(d_max, d_A,
+                                                         vectorSize);
 
   // Copia resultado para o host
   cudaMemcpy(&h_max, d_max, sizeof(float), cudaMemcpyDeviceToHost);
@@ -107,9 +118,8 @@ int main(int argc, char **argv) {
 
   // Checa corretude do resultado
   if (h_max != correct) {
-    fprintf(stderr, "Resultado errado. Esperava %f e obteve %f\n", correct,
-            h_max);
-    exit(EXIT_FAILURE);
+    errorAndAbort("Resultado errado. Esperava %f e obteve %f\n", correct,
+                  h_max);
   }
 
   // Libera estruturas
