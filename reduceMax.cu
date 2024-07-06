@@ -26,7 +26,7 @@
 #define TOTAL_BLOCKS (MP * RESIDENT_BLOCKS_PER_MP)
 #define NTA (TOTAL_BLOCKS * THREADS_PER_BLOCK)
 
-__global__ float blockMax[TOTAL_BLOCKS];
+__device__ float blockMax[TOTAL_BLOCKS];
 
 __global__ void reduceMax_persist(float *max, float *Input,
                                   unsigned int nElements) {
