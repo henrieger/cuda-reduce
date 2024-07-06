@@ -15,15 +15,18 @@
 #define MP 28
 #define THREADS_PER_BLOCK 1024
 #define RESIDENT_BLOCKS_PER_MP 2
-#define NTA (MP * RESIDENT_BLOCKS_PER_MP * THREADS_PER_BLOCK)
 #endif
 
 #if GPU == GTX1070
 #define MP 28
 #define THREADS_PER_BLOCK 1024
 #define RESIDENT_BLOCKS_PER_MP 2
-#define NTA (MP * RESIDENT_BLOCKS_PER_MP * THREADS_PER_BLOCK)
 #endif
+
+#define TOTAL_BLOCKS (MP * RESIDENT_BLOCKS_PER_MP)
+#define NTA (TOTAL_BLOCKS * THREADS_PER_BLOCK)
+
+__global__ float blockMax[TOTAL_BLOCKS];
 
 __global__ void reduceMax_persist(float *max, float *Input,
                                   unsigned int nElements) {
@@ -45,6 +48,18 @@ __global__ void reduceMax_persist(float *max, float *Input,
   }
 
   // TODO: FASE 3 - Computa o máximo de todos os blocos usando atomicos
+  int b = blockIdx.x;
+  if (t == 0) {
+    blockMax[b] = threadsMax[0];
+    for (int stride = TOTAL_BLOCKS; stride > 0; stride /= 2) {
+      __syncthreads();
+      if (b < stride)
+        blockMax[b] = fmax(blockMax[b], blockMax[b + stride]);
+    }
+  }
+
+  if (b == 0 && t == 0)
+    *max = blockMax[0];
 }
 
 __global__ void reduceMax_atomic_persist(float *max, float *Input,
