@@ -42,9 +42,9 @@ __global__ void reduceMax_persist(float *max, float *Input,
     threadsMax[t] = fmaxf(threadsMax[t], Input[i]);
 
   // FASE 2 - Computa o máximo do bloco usando o algoritmo dos slides
-  for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+  for (int stride = blockDim.x; stride > 0; stride /= 2) {
     __syncthreads();
-    if (t < stride)
+    if (t < stride && t + stride < THREADS_PER_BLOCK)
       threadsMax[t] = fmaxf(threadsMax[t], threadsMax[t + stride]);
   }
 
@@ -52,9 +52,9 @@ __global__ void reduceMax_persist(float *max, float *Input,
   int b = blockIdx.x;
   if (t == 0) {
     blockMax[b] = threadsMax[0];
-    for (int stride = TOTAL_BLOCKS / 2; stride > 0; stride /= 2) {
+    for (int stride = TOTAL_BLOCKS; stride > 0; stride /= 2) {
       __syncthreads();
-      if (b < stride)
+      if (b < stride && b + stride < TOTAL_BLOCKS)
         blockMax[b] = fmaxf(blockMax[b], blockMax[b + stride]);
     }
   }
@@ -135,10 +135,9 @@ int main(int argc, char **argv) {
     correct = fmaxf(h_A[i], correct);
 
   // Checa corretude do resultado
-  if (fabsf(h_max - correct) > 1e5) {
+  if (fabsf(h_max - correct) > 1e5)
     errorAndAbort("Resultado errado. Esperava %f e obteve %f\n", correct,
                   h_max);
-  }
 
   // Libera estruturas
   cudaFree(d_A);
