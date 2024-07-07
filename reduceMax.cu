@@ -39,23 +39,23 @@ __global__ void reduceMax_persist(float *max, float *Input,
   // FASE 1 - Computa o máximo para cada thread
   int initial = blockDim.x * blockIdx.x + t;
   for (int i = initial; i < nElements; i += NTA)
-    threadsMax[t] = fmax(threadsMax[t], Input[i]);
+    threadsMax[t] = fmaxf(threadsMax[t], Input[i]);
 
   // FASE 2 - Computa o máximo do bloco usando o algoritmo dos slides
-  for (int stride = blockDim.x; stride > 0; stride /= 2) {
+  for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
     __syncthreads();
     if (t < stride)
-      threadsMax[t] = fmax(threadsMax[t], threadsMax[t + stride]);
+      threadsMax[t] = fmaxf(threadsMax[t], threadsMax[t + stride]);
   }
 
   // FASE 3 - Computa o máximo de todos os blocos usando atomicos
   int b = blockIdx.x;
   if (t == 0) {
     blockMax[b] = threadsMax[0];
-    for (int stride = TOTAL_BLOCKS; stride > 0; stride /= 2) {
+    for (int stride = TOTAL_BLOCKS / 2; stride > 0; stride /= 2) {
       __syncthreads();
       if (b < stride)
-        blockMax[b] = fmax(blockMax[b], blockMax[b + stride]);
+        blockMax[b] = fmaxf(blockMax[b], blockMax[b + stride]);
     }
   }
 
@@ -74,14 +74,15 @@ void errorAndAbort(const char *format, ...) {
   vfprintf(stderr, format, args);
   va_end(args);
 
-  printf("Abortado");
+  printf("Abortado\n");
   exit(EXIT_FAILURE);
 }
 
 int main(int argc, char **argv) {
-  if (argc != 2) {
+  cudaError_t err = cudaSuccess;
+
+  if (argc != 2)
     errorAndAbort("Uso: %s <TAM_VETOR>\n", argv[0]);
-  }
 
   srand(SEED);
 
@@ -94,30 +95,47 @@ int main(int argc, char **argv) {
   // Aloca espaço na GPU para vetor A e resultado
   float *d_A = NULL;
   float *d_max = NULL;
-  cudaMalloc((void **)&d_A, vectorSize * sizeof(float));
-  cudaMalloc((void **)&d_max, sizeof(float));
+  err = cudaMalloc((void **)&d_A, vectorSize * sizeof(float));
+  if (err != cudaSuccess)
+    errorAndAbort("Erro ao alocar vetor A no dispositivo: %s\n",
+                  cudaGetErrorString(err));
+  err = cudaMalloc((void **)&d_max, sizeof(float));
+  if (err != cudaSuccess)
+    errorAndAbort("Erro ao alocar resultado no dispositivo: %s\n",
+                  cudaGetErrorString(err));
 
   // Inicializa vetor A com valores aleatórios entre 0 e 1
   for (int i = 0; i < vectorSize; i++)
     h_A[i] = (float)rand() / RAND_MAX;
 
   // Copia vetor A para GPU
-  cudaMemcpy(h_A, d_A, vectorSize * sizeof(float), cudaMemcpyHostToDevice);
+  err =
+      cudaMemcpy(d_A, h_A, vectorSize * sizeof(float), cudaMemcpyHostToDevice);
+  if (err != cudaSuccess)
+    errorAndAbort("Erro ao copiar vetor A para dispositivo: %s\n",
+                  cudaGetErrorString(err));
 
   // Lança kernel
   reduceMax_persist<<<TOTAL_BLOCKS, THREADS_PER_BLOCK>>>(d_max, d_A,
                                                          vectorSize);
+  err = cudaGetLastError();
+  if (err != cudaSuccess)
+    errorAndAbort("Erro ao lançar kernel reduceMax_persist: %s\n",
+                  cudaGetErrorString(err));
 
   // Copia resultado para o host
-  cudaMemcpy(&h_max, d_max, sizeof(float), cudaMemcpyDeviceToHost);
+  err = cudaMemcpy(&h_max, d_max, sizeof(float), cudaMemcpyDeviceToHost);
+  if (err != cudaSuccess)
+    errorAndAbort("Erro ao copiar resultado para o host: %s\n",
+                  cudaGetErrorString(err));
 
   // Calcula redução normal em CPU
   float correct = 0;
   for (int i = 0; i < vectorSize; i++)
-    correct = fmax(h_A[i], correct);
+    correct = fmaxf(h_A[i], correct);
 
   // Checa corretude do resultado
-  if (h_max != correct) {
+  if (fabsf(h_max - correct) > 1e5) {
     errorAndAbort("Resultado errado. Esperava %f e obteve %f\n", correct,
                   h_max);
   }

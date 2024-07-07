@@ -1,3 +1,4 @@
 reduceMax_persist
 reduceMax_atomic_persist
 *.o
+.clangd
