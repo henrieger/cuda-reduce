@@ -81,12 +81,13 @@ void errorAndAbort(const char *format, ...) {
 int main(int argc, char **argv) {
   cudaError_t err = cudaSuccess;
 
-  if (argc != 2)
-    errorAndAbort("Uso: %s <TAM_VETOR>\n", argv[0]);
+  if (argc != 3)
+    errorAndAbort("Uso: %s <TAM_VETOR> <NR>\n", argv[0]);
 
   srand(SEED);
 
   int vectorSize = atoi(argv[1]);
+  int repetitions = atoi(argv[2]);
 
   // Aloca espaço no host para vetor A e resultado
   float *h_A = (float *)malloc(vectorSize * sizeof(float));
@@ -104,43 +105,45 @@ int main(int argc, char **argv) {
     errorAndAbort("Erro ao alocar resultado no dispositivo: %s\n",
                   cudaGetErrorString(err));
 
-  // Inicializa vetor A com valores aleatórios
-  for (int i = 0; i < vectorSize; i++) {
-    float a = rand();
-    float b = rand();
-    h_A[i] = a * 100 + b;
+  for (int i = 0; i < repetitions; i++) {
+    // Inicializa vetor A com valores aleatórios
+    for (int j = 0; j < vectorSize; j++) {
+      float a = rand();
+      float b = rand();
+      h_A[j] = a * 100 + b;
+    }
+
+    // Copia vetor A para GPU
+    err = cudaMemcpy(d_A, h_A, vectorSize * sizeof(float),
+                     cudaMemcpyHostToDevice);
+    if (err != cudaSuccess)
+      errorAndAbort("Erro ao copiar vetor A para dispositivo: %s\n",
+                    cudaGetErrorString(err));
+
+    // Lança kernel
+    reduceMax_persist<<<TOTAL_BLOCKS, THREADS_PER_BLOCK>>>(d_max, d_A,
+                                                           vectorSize);
+    err = cudaGetLastError();
+    if (err != cudaSuccess)
+      errorAndAbort("Erro ao lançar kernel reduceMax_persist: %s\n",
+                    cudaGetErrorString(err));
+
+    // Copia resultado para o host
+    err = cudaMemcpy(&h_max, d_max, sizeof(float), cudaMemcpyDeviceToHost);
+    if (err != cudaSuccess)
+      errorAndAbort("Erro ao copiar resultado para o host: %s\n",
+                    cudaGetErrorString(err));
+
+    // Calcula redução normal em CPU
+    float correct = 0;
+    for (int i = 0; i < vectorSize; i++)
+      correct = fmaxf(h_A[i], correct);
+
+    // Checa corretude do resultado
+    if (fabsf(h_max - correct) > 1e5)
+      errorAndAbort("Resultado errado. Esperava %f e obteve %f\n", correct,
+                    h_max);
   }
-
-  // Copia vetor A para GPU
-  err =
-      cudaMemcpy(d_A, h_A, vectorSize * sizeof(float), cudaMemcpyHostToDevice);
-  if (err != cudaSuccess)
-    errorAndAbort("Erro ao copiar vetor A para dispositivo: %s\n",
-                  cudaGetErrorString(err));
-
-  // Lança kernel
-  reduceMax_persist<<<TOTAL_BLOCKS, THREADS_PER_BLOCK>>>(d_max, d_A,
-                                                         vectorSize);
-  err = cudaGetLastError();
-  if (err != cudaSuccess)
-    errorAndAbort("Erro ao lançar kernel reduceMax_persist: %s\n",
-                  cudaGetErrorString(err));
-
-  // Copia resultado para o host
-  err = cudaMemcpy(&h_max, d_max, sizeof(float), cudaMemcpyDeviceToHost);
-  if (err != cudaSuccess)
-    errorAndAbort("Erro ao copiar resultado para o host: %s\n",
-                  cudaGetErrorString(err));
-
-  // Calcula redução normal em CPU
-  float correct = 0;
-  for (int i = 0; i < vectorSize; i++)
-    correct = fmaxf(h_A[i], correct);
-
-  // Checa corretude do resultado
-  if (fabsf(h_max - correct) > 1e5)
-    errorAndAbort("Resultado errado. Esperava %f e obteve %f\n", correct,
-                  h_max);
 
   // Libera estruturas
   cudaFree(d_A);
