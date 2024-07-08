@@ -4,7 +4,10 @@
 #include <stdlib.h>
 
 #include <cuda_runtime.h>
-#include <helper_cuda.h>
+
+#include <thrust/device_vector.h>
+#include <thrust/device_ptr.h>
+#include <thrust/extrema.h>
 
 #define SEED 31415926
 
@@ -120,6 +123,10 @@ int main(int argc, char **argv) {
       errorAndAbort("Erro ao copiar vetor A para dispositivo: %s\n",
                     cudaGetErrorString(err));
 
+    // Wrapers do Thrust para vetor A
+    thrust::device_ptr<float> thrust_A(d_A);
+    thrust::device_vector<float> thrust_A_vector(thrust_A, thrust_A + vectorSize);
+
     // Lança kernel
     reduceMax_persist<<<TOTAL_BLOCKS, THREADS_PER_BLOCK>>>(d_max, d_A,
                                                            vectorSize);
@@ -127,6 +134,7 @@ int main(int argc, char **argv) {
     if (err != cudaSuccess)
       errorAndAbort("Erro ao lançar kernel reduceMax_persist: %s\n",
                     cudaGetErrorString(err));
+    cudaDeviceSynchronize();
 
     // Copia resultado para o host
     err = cudaMemcpy(&h_max, d_max, sizeof(float), cudaMemcpyDeviceToHost);
@@ -134,10 +142,10 @@ int main(int argc, char **argv) {
       errorAndAbort("Erro ao copiar resultado para o host: %s\n",
                     cudaGetErrorString(err));
 
-    // Calcula redução normal em CPU
-    float correct = 0;
-    for (int i = 0; i < vectorSize; i++)
-      correct = fmaxf(h_A[i], correct);
+    // Calcula redução usando Thrust
+    float correct =
+        *thrust::max_element(thrust_A_vector.begin(), thrust_A_vector.end());
+    printf("%f\n", correct);
 
     // Checa corretude do resultado
     if (fabsf(h_max - correct) > 1e5)

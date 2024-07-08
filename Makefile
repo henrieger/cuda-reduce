@@ -1,5 +1,5 @@
 CC = nvcc
-CFLAGS = -I/usr/local/cuda/cuda-samples/Common --threads 0 --std=c++11
+CFLAGS = -I/usr/include/c++/10 -I/usr/lib/cuda/include/ --std=c++11
 LDLIBS = -lm
 
 EXEC = reduceMax
