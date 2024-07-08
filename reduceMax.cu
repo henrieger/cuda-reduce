@@ -104,9 +104,12 @@ int main(int argc, char **argv) {
     errorAndAbort("Erro ao alocar resultado no dispositivo: %s\n",
                   cudaGetErrorString(err));
 
-  // Inicializa vetor A com valores aleatórios entre 0 e 1
-  for (int i = 0; i < vectorSize; i++)
-    h_A[i] = (float)rand() / RAND_MAX;
+  // Inicializa vetor A com valores aleatórios
+  for (int i = 0; i < vectorSize; i++) {
+    float a = rand();
+    float b = rand();
+    h_A[i] = a * 100 + b;
+  }
 
   // Copia vetor A para GPU
   err =
