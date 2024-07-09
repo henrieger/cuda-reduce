@@ -2,12 +2,12 @@ CC = nvcc
 CFLAGS = -I/usr/include/c++/10 -I/usr/lib/cuda/include/ --std=c++11
 LDLIBS = -lm
 
-EXEC = reduceMax
+EXEC = cudaReduceMax
 
 all: $(EXEC)
 
-reduceMax: reduceMax.cu
-	$(CC) $(CFLAGS) reduceMax.cu -o reduceMax $(LDLIBS)
+cudaReduceMax: cudaReduceMax.cu
+	$(CC) $(CFLAGS) cudaReduceMax.cu -o cudaReduceMax $(LDLIBS)
 
 debug: CFLAGS += -I/usr/lib/nvidia-cuda-toolkit/compute-sanitizer -g -G
 debug: all

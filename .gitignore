@@ -1,4 +1,4 @@
-reduceMax
+cudaReduceMax
 reduceMax_persist
 reduceMax_atomic_persist
 *.o
