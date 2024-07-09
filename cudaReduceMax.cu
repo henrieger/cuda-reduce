@@ -30,15 +30,11 @@
 #define TOTAL_BLOCKS (MP * RESIDENT_BLOCKS_PER_MP)
 #define NTA (TOTAL_BLOCKS * THREADS_PER_BLOCK)
 
-__device__ float atomicMaxFloat(float *address, float val) {
+__device__ inline float atomicMaxFloat(float *address, float val) {
   int *address_as_int = (int *)address;
-  int old = *address_as_int, assumed;
-  do {
-    assumed = old;
-    old = atomicCAS(address_as_int, assumed,
-                    __float_as_int(fmaxf(val, __int_as_float(assumed))));
-  } while (assumed != old);
-  return __int_as_float(old);
+  int val_as_int = __float_as_int(val);
+  atomicMax(address_as_int, val_as_int);
+  return __int_as_float(*address_as_int);
 }
 
 __global__ void reduceMax_persist(float *max, float *Input,
@@ -71,7 +67,31 @@ __global__ void reduceMax_persist(float *max, float *Input,
 
 __global__ void reduceMax_atomic_persist(float *max, float *Input,
                                          unsigned int nElements) {
-  return;
+  // Inicia máximo das threads em shared memory
+  __shared__ float threadsMax;
+  if (threadIdx.x == 0)
+    threadsMax = 0;
+
+  // Reseta resposta
+  if (blockIdx.x == 0 && threadIdx.x == 0)
+    *max = 0;
+
+  // Inicia máximo local da thread
+  float localMax = 0;
+
+  // FASE 1 - Computa o máximo para cada thread
+  int initial = blockDim.x * blockIdx.x + threadIdx.x;
+  for (int i = initial; i < nElements; i += NTA)
+    localMax = fmaxf(localMax, Input[i]);
+
+  // FASE 2 - Computa o máximo do bloco usando atomicos
+  __syncthreads();
+  atomicMaxFloat(&threadsMax, localMax);
+
+  // FASE 3 - Computa o máximo de todos os blocos usando atomicos
+  __syncthreads();
+  if (threadIdx.x == 0)
+    atomicMaxFloat(max, threadsMax);
 }
 
 void errorAndAbort(const char *format, ...) {
@@ -98,6 +118,7 @@ int main(int argc, char **argv) {
   // Aloca espaço no host para vetor A e resultado
   float *h_A = (float *)malloc(vectorSize * sizeof(float));
   float h_max = 0;
+  float h_max_atomic = 0;
 
   // Aloca espaço na GPU para vetor A e resultado
   float *d_A = NULL;
@@ -131,7 +152,7 @@ int main(int argc, char **argv) {
     thrust::device_vector<float> thrust_A_vector(thrust_A,
                                                  thrust_A + vectorSize);
 
-    // Lança kernel
+    // Lança kernel reduceMax_persist
     reduceMax_persist<<<TOTAL_BLOCKS, THREADS_PER_BLOCK>>>(d_max, d_A,
                                                            vectorSize);
     err = cudaGetLastError();
@@ -146,15 +167,32 @@ int main(int argc, char **argv) {
       errorAndAbort("Erro ao copiar resultado para o host: %s\n",
                     cudaGetErrorString(err));
 
+    // Lança kernel reduceMax_atomic_persist
+    reduceMax_atomic_persist<<<TOTAL_BLOCKS, THREADS_PER_BLOCK>>>(d_max, d_A,
+                                                           vectorSize);
+    err = cudaGetLastError();
+    if (err != cudaSuccess)
+      errorAndAbort("Erro ao lançar kernel reduceMax_atomic_persist: %s\n",
+                    cudaGetErrorString(err));
+    cudaDeviceSynchronize();
+
+    // Copia resultado para o host
+    err = cudaMemcpy(&h_max_atomic, d_max, sizeof(float), cudaMemcpyDeviceToHost);
+    if (err != cudaSuccess)
+      errorAndAbort("Erro ao copiar resultado para o host: %s\n",
+                    cudaGetErrorString(err));
+
     // Calcula redução usando Thrust
     float correct =
         *thrust::max_element(thrust_A_vector.begin(), thrust_A_vector.end());
-    printf("%f\n", correct);
 
     // Checa corretude do resultado
     if (h_max != correct)
-      errorAndAbort("Resultado errado. Esperava %f e obteve %f\n", correct,
+      errorAndAbort("Resultado h_max errado. Esperava %f e obteve %f\n", correct,
                     h_max);
+    if (h_max_atomic != correct)
+      errorAndAbort("Resultado h_max_atomic errado. Esperava %f e obteve %f\n", correct,
+                    h_max_atomic);
   }
 
   // Libera estruturas
