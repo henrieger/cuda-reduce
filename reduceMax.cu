@@ -5,8 +5,8 @@
 
 #include <cuda_runtime.h>
 
-#include <thrust/device_vector.h>
 #include <thrust/device_ptr.h>
+#include <thrust/device_vector.h>
 #include <thrust/extrema.h>
 
 #define SEED 31415926
@@ -30,7 +30,16 @@
 #define TOTAL_BLOCKS (MP * RESIDENT_BLOCKS_PER_MP)
 #define NTA (TOTAL_BLOCKS * THREADS_PER_BLOCK)
 
-__device__ float blockMax[TOTAL_BLOCKS];
+__device__ float atomicMaxFloat(float *address, float val) {
+  int *address_as_int = (int *)address;
+  int old = *address_as_int, assumed;
+  do {
+    assumed = old;
+    old = atomicCAS(address_as_int, assumed,
+                    __float_as_int(fmaxf(val, __int_as_float(assumed))));
+  } while (assumed != old);
+  return __int_as_float(old);
+}
 
 __global__ void reduceMax_persist(float *max, float *Input,
                                   unsigned int nElements) {
@@ -39,31 +48,25 @@ __global__ void reduceMax_persist(float *max, float *Input,
   int t = threadIdx.x;
   threadsMax[t] = 0;
 
+  // Reseta resposta
+  if (t == 0)
+    *max = 0;
+
   // FASE 1 - Computa o máximo para cada thread
   int initial = blockDim.x * blockIdx.x + t;
   for (int i = initial; i < nElements; i += NTA)
     threadsMax[t] = fmaxf(threadsMax[t], Input[i]);
 
   // FASE 2 - Computa o máximo do bloco usando o algoritmo dos slides
-  for (int stride = blockDim.x; stride > 0; stride /= 2) {
+  for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
     __syncthreads();
-    if (t < stride && t + stride < THREADS_PER_BLOCK)
+    if (t < stride)
       threadsMax[t] = fmaxf(threadsMax[t], threadsMax[t + stride]);
   }
 
   // FASE 3 - Computa o máximo de todos os blocos usando atomicos
-  int b = blockIdx.x;
-  if (t == 0) {
-    blockMax[b] = threadsMax[0];
-    for (int stride = TOTAL_BLOCKS; stride > 0; stride /= 2) {
-      __syncthreads();
-      if (b < stride && b + stride < TOTAL_BLOCKS)
-        blockMax[b] = fmaxf(blockMax[b], blockMax[b + stride]);
-    }
-  }
-
-  if (b == 0 && t == 0)
-    *max = blockMax[0];
+  if (t == 0)
+    atomicMaxFloat(max, threadsMax[0]);
 }
 
 __global__ void reduceMax_atomic_persist(float *max, float *Input,
@@ -125,7 +128,8 @@ int main(int argc, char **argv) {
 
     // Wrapers do Thrust para vetor A
     thrust::device_ptr<float> thrust_A(d_A);
-    thrust::device_vector<float> thrust_A_vector(thrust_A, thrust_A + vectorSize);
+    thrust::device_vector<float> thrust_A_vector(thrust_A,
+                                                 thrust_A + vectorSize);
 
     // Lança kernel
     reduceMax_persist<<<TOTAL_BLOCKS, THREADS_PER_BLOCK>>>(d_max, d_A,
@@ -148,7 +152,7 @@ int main(int argc, char **argv) {
     printf("%f\n", correct);
 
     // Checa corretude do resultado
-    if (fabsf(h_max - correct) > 1e5)
+    if (h_max != correct)
       errorAndAbort("Resultado errado. Esperava %f e obteve %f\n", correct,
                     h_max);
   }

@@ -9,7 +9,7 @@ all: $(EXEC)
 reduceMax: reduceMax.cu
 	$(CC) $(CFLAGS) reduceMax.cu -o reduceMax $(LDLIBS)
 
-debug: CFLAGS += -lineinfo -I/usr/lib/nvidia-cuda-toolkit/compute-sanitizer -g
+debug: CFLAGS += -I/usr/lib/nvidia-cuda-toolkit/compute-sanitizer -g -G
 debug: all
 
 clean:
