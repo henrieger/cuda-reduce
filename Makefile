@@ -6,8 +6,11 @@ EXEC = cudaReduceMax
 
 all: $(EXEC)
 
-cudaReduceMax: cudaReduceMax.cu
-	$(CC) $(CFLAGS) cudaReduceMax.cu -o cudaReduceMax $(LDLIBS)
+cudaReduceMax: cudaReduceMax.cu chrono.o
+	$(CC) $(CFLAGS) cudaReduceMax.cu -o cudaReduceMax $(LDLIBS) chrono.o
+
+chrono.o: chrono.c
+	gcc -o chrono.o -c chrono.c
 
 debug: CFLAGS += -I/usr/lib/nvidia-cuda-toolkit/compute-sanitizer -g -G
 debug: all
