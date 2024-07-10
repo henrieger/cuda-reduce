@@ -134,13 +134,13 @@ int main(int argc, char **argv) {
     errorAndAbort("Erro ao alocar resultado no dispositivo: %s\n",
                   cudaGetErrorString(err));
 
-  chronometer_t *clockThrust;
-  chronometer_t *clockPersistent;
-  chronometer_t *clockAtomic;
+  chronometer_t clockThrust;
+  chronometer_t clockPersist;
+  chronometer_t clockAtomic;
 
-  chrono_reset(clockThrust);
-  chrono_reset(clockPersistent);
-  chrono_reset(clockAtomic);
+  chrono_reset(&clockThrust);
+  chrono_reset(&clockPersist);
+  chrono_reset(&clockAtomic);
 
   for (int i = 0; i < repetitions; i++) {
     // Inicializa vetor A com valores aleatórios
@@ -163,7 +163,7 @@ int main(int argc, char **argv) {
                                                  thrust_A + vectorSize);
 
     // Lança kernel reduceMax_persist
-    chrono_start(clockPersist);
+    chrono_start(&clockPersist);
     reduceMax_persist<<<TOTAL_BLOCKS, THREADS_PER_BLOCK>>>(d_max, d_A,
                                                            vectorSize);
     err = cudaGetLastError();
@@ -171,7 +171,7 @@ int main(int argc, char **argv) {
       errorAndAbort("Erro ao lançar kernel reduceMax_persist: %s\n",
                     cudaGetErrorString(err));
     cudaDeviceSynchronize();
-    chrono_stop(clockPersist);
+    chrono_stop(&clockPersist);
 
     // Copia resultado para o host
     err = cudaMemcpy(&h_max, d_max, sizeof(float), cudaMemcpyDeviceToHost);
@@ -180,7 +180,7 @@ int main(int argc, char **argv) {
                     cudaGetErrorString(err));
 
     // Lança kernel reduceMax_atomic_persist
-    chrono_start(clockAtomic);
+    chrono_start(&clockAtomic);
     reduceMax_atomic_persist<<<TOTAL_BLOCKS, THREADS_PER_BLOCK>>>(d_max, d_A,
                                                            vectorSize);
     err = cudaGetLastError();
@@ -188,7 +188,7 @@ int main(int argc, char **argv) {
       errorAndAbort("Erro ao lançar kernel reduceMax_atomic_persist: %s\n",
                     cudaGetErrorString(err));
     cudaDeviceSynchronize();
-    chrono_stop(clockAtomic);
+    chrono_stop(&clockAtomic);
 
     // Copia resultado para o host
     err = cudaMemcpy(&h_max_atomic, d_max, sizeof(float), cudaMemcpyDeviceToHost);
@@ -197,10 +197,10 @@ int main(int argc, char **argv) {
                     cudaGetErrorString(err));
 
     // Calcula redução usando Thrust
-    chrono_start(clockThrust);
+    chrono_start(&clockThrust);
     float correct =
         *thrust::max_element(thrust_A_vector.begin(), thrust_A_vector.end());
-    chrono_stop(clockThrust);
+    chrono_stop(&clockThrust);
 
     // Checa corretude do resultado
     if (h_max != correct)
@@ -210,9 +210,9 @@ int main(int argc, char **argv) {
       errorAndAbort("Resultado h_max_atomic errado. Esperava %f e obteve %f\n", correct,
                     h_max_atomic);
   }
-  chrono_reportTime(clockThrust, "thrust");
-  chrono_reportTime(clockPersist, "persist");
-  chrono_reportTime(clockAtomic, "atomic");
+  chrono_reportTime(&clockThrust, "thrust");
+  chrono_reportTime(&clockPersist, "persist");
+  chrono_reportTime(&clockAtomic, "atomic");
 
   // Libera estruturas
   cudaFree(d_A);
