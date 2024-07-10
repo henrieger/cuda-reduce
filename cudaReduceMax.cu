@@ -9,6 +9,8 @@
 #include <thrust/device_vector.h>
 #include <thrust/extrema.h>
 
+#include "chrono.c"
+
 #define SEED 31415926
 
 #define GTX1080Ti 1
