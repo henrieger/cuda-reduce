@@ -214,9 +214,9 @@ int main(int argc, char **argv) {
   chrono_reportTime(&clockPersist, "reduceMax_persist");
   chrono_reportTime(&clockAtomic, "reduceMax_atomic_persist");
 
-  printf("Vazao thrust: %lf Gflops\n",vectorSize*(double)chrono_getcount(&clockThrust)/(double)chrono_gettotal(&clockThrust));///1000000000);
-  printf("Vazao reduceMax_persist: %lf Gflops\n",vectorSize*(double)chrono_getcount(&clockPersist)/(double)chrono_gettotal(&clockPersist));///1000000000);
-  printf("Vazao reduceMax_atomic_persist: %lf Gflops\n",vectorSize*(double)chrono_getcount(&clockAtomic)/(double)chrono_gettotal(&clockAtomic));///1000000000);
+  printf("Vazao thrust: %lf Gflops\n",vectorSize*(double)chrono_getcount(&clockThrust)/(double)chrono_gettotal(&clockThrust)/1000000000);
+  printf("Vazao reduceMax_persist: %lf Gflops\n",vectorSize*(double)chrono_getcount(&clockPersist)/(double)chrono_gettotal(&clockPersist)/1000000000);
+  printf("Vazao reduceMax_atomic_persist: %lf Gflops\n",vectorSize*(double)chrono_getcount(&clockAtomic)/(double)chrono_gettotal(&clockAtomic)/1000000000);
 
   // Libera estruturas
   cudaFree(d_A);
