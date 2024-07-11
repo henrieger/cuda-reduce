@@ -142,6 +142,8 @@ int main(int argc, char **argv) {
   chrono_reset(&clockPersist);
   chrono_reset(&clockAtomic);
 
+  printf("Thrust | Persist | Atomic Persist\n");
+
   for (int i = 0; i < repetitions; i++) {
     // Inicializa vetor A com valores aleatórios
     for (int j = 0; j < vectorSize; j++) {
@@ -209,6 +211,9 @@ int main(int argc, char **argv) {
     if (h_max_atomic != correct)
       errorAndAbort("Resultado h_max_atomic errado. Esperava %f e obteve %f\n", correct,
                     h_max_atomic);
+
+    // Imprime resultados
+    printf("%f | %f | %f\n",correct,h_max,h_max_atomic);
   }
   chrono_reportTime(&clockThrust, "thrust");
   chrono_reportTime(&clockPersist, "reduceMax_persist");
